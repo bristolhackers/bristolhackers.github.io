@@ -207,27 +207,14 @@ h1 {
 /*Start of info*/
 
 .info {
-  padding: 1%;
+  padding: 2%;
 }
 
-.block {
-  width: 100%;
-  box-shadow: 0 8px 6px -6px #E5E6E5;
+.info h2 {
+  color: #B01C2E;
 }
 
-.cont{
-  width: 50%;
+.infoBlock {
+  max-width: 50%;
   float: left;
-}
-
-.cont h2 {
-  font-size: 40px;
-}
-
-.cont p {
-  font-size: 25px;
-}
-
-.cont img {
-  max-width: 100%;
 }
